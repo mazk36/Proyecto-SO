@@ -1,0 +1,105 @@
+============================================================
+  CÓMO EJECUTAR EL SIMULADOR EN OTRA COMPUTADORA
+  (instrucciones de instalación y ejecución)
+============================================================
+
+Este programa es un servidor web local hecho en Python. En la otra PC NO se
+necesita Node, ni base de datos, ni compilar nada. Solo Python y conexión a
+internet la primera vez (para descargar 3 librerías).
+
+
+------------------------------------------------------------
+PASO 0 — INSTALAR PYTHON (si la otra PC no lo tiene)
+------------------------------------------------------------
+1. Entra a:  https://www.python.org/downloads/
+2. Descarga Python 3.10 o superior e instálalo.
+3. MUY IMPORTANTE: en la primera pantalla del instalador, MARCA la casilla
+   "Add Python to PATH" antes de darle a "Install Now".
+4. Para comprobar que quedó bien, abre PowerShell y escribe:
+        python --version
+   Debe responder algo como "Python 3.12.x". (Si no, reinstala marcando PATH.)
+
+
+------------------------------------------------------------
+PASO 1 — LLEVAR EL PROYECTO A LA OTRA PC (elige una opción)
+------------------------------------------------------------
+
+OPCIÓN A — Copiarlo con USB / nube (lo más simple):
+   - Copia TODA la carpeta "simulador-so".
+   - OJO: NO hace falta copiar la subcarpeta ".venv" (es pesada y se recrea
+     sola en el paso 2). Si la copiaste, no pasa nada, pero conviene borrarla
+     en la otra PC para que cree una nueva limpia.
+
+OPCIÓN B — Descargarlo desde GitHub (el repo es privado, pide tu login):
+        git clone https://github.com/mazk36/Proyecto-SO.git
+   Eso crea una carpeta "Proyecto-SO" con el proyecto adentro.
+
+
+------------------------------------------------------------
+PASO 2 — EJECUTARLO
+------------------------------------------------------------
+
+>>> FORMA FÁCIL (Windows): doble clic en el archivo  run.bat
+    Ese archivo solo: crea el entorno, instala las librerías, abre el
+    navegador y arranca el servidor. Si funciona, ya está: ignora lo de abajo.
+
+>>> FORMA MANUAL (si run.bat falla o no es Windows):
+    Abre una terminal DENTRO de la carpeta del proyecto y ejecuta, en orden:
+
+    En Windows (PowerShell):
+        python -m venv .venv
+        .\.venv\Scripts\Activate.ps1
+        pip install -r requirements.txt
+        python -m uvicorn so_sim.app:app
+
+    En Linux o Mac (terminal):
+        python3 -m venv .venv
+        source .venv/bin/activate
+        pip install -r requirements.txt
+        python3 -m uvicorn so_sim.app:app
+
+    Cuando veas el mensaje "Uvicorn running on http://127.0.0.1:8000",
+    abre el navegador en:   http://127.0.0.1:8000
+
+
+------------------------------------------------------------
+PASO 3 — DETENERLO
+------------------------------------------------------------
+En la terminal donde corre el servidor, presiona  Ctrl + C.
+
+
+------------------------------------------------------------
+PROBLEMAS FRECUENTES
+------------------------------------------------------------
+
+· "python no se reconoce como comando":
+     Python no está en el PATH. Reinstálalo marcando "Add Python to PATH",
+     o prueba escribiendo  py  en lugar de  python.
+
+· Error al activar el entorno en PowerShell (políticas de ejecución):
+     Abre PowerShell y ejecuta una sola vez:
+        Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+     Luego repite el PASO 2. (O usa run.bat, que no necesita activar nada.)
+
+· "Address already in use" / el puerto 8000 está ocupado:
+     Arranca en otro puerto, por ejemplo el 8001:
+        python -m uvicorn so_sim.app:app --port 8001
+     Y abre  http://127.0.0.1:8001
+
+· La página carga pero no avanza al dar "Reproducir":
+     Suele ser un antivirus/proxy bloqueando el stream. La app ya tiene un
+     plan B automático (consulta el estado por su cuenta), así que espera
+     unos segundos o recarga con Ctrl + F5.
+
+· Quiero correr las pruebas para verificar que todo está bien:
+        pip install pytest
+        python -m pytest
+
+
+------------------------------------------------------------
+RESUMEN ULTRARRÁPIDO
+------------------------------------------------------------
+1. Instalar Python (marcar "Add to PATH").
+2. Copiar la carpeta del proyecto (sin la .venv).
+3. Doble clic en run.bat   ->   abrir http://127.0.0.1:8000
+============================================================
