@@ -152,4 +152,97 @@ bloqueo y desbloqueo por E/S, y el determinismo del motor.
   reproducible y serializable.
 - Planificadores y reemplazos siguen el patrón Strategy con una fábrica, y se
   intercambian entre ticks bajo un único candado, sin tocar los PCB ni las tablas.
+
+## Estado del proyecto y cómo retomarlo
+
+### Estado actual
+
+El simulador está **funcional**: un núcleo en Python puro (sin dependencias de FastAPI) que integra tres subsistemas (planificación, memoria virtual con paginación y E/S) sobre un único reloj lógico, expuesto mediante una API FastAPI y una interfaz web en vivo vía Server-Sent Events (SSE).
+
+Lo que ya está hecho y funcionando:
+
+- **Núcleo del simulador completo**: `World` orquesta el `tick()` con fases en orden fijo; PCB con planes declarativos de memoria e I/O para garantizar reproducibilidad.
+- **7 algoritmos de planificación**: FCFS, SJF, SRTF, Round Robin (quantum configurable), Prioridad no apropiativa, Prioridad apropiativa y MLQ (multinivel), bajo patrón Strategy.
+- **Memoria virtual**: MMU con traducción VA→FA, page faults/hits y **4 algoritmos de reemplazo** (FIFO, LRU, Óptimo/Belady, Reloj), todos cambiables en caliente.
+- **E/S por ticks** (sin hilos): cola FIFO por dispositivo, bloqueo/desbloqueo de procesos y 4 tipos predefinidos (disco, impresora, teclado, red), con simulación DMA determinista.
+- **API FastAPI completa**: control (play/pause/step/reset/speed), configuración en caliente (scheduler/replacer), carga de escenarios y estado vía `GET /api/state` + `GET /api/stream` (SSE con fallback a polling).
+- **5 escenarios predefinidos**: `basico`, `page_faults` (cadena clásica de Belady), `mlq`, `round_robin`, `io_overlap`.
+- **Interfaz web** HTML+CSS+JS sin frameworks ni empaquetador: paneles de procesos, CPU, Gantt (canvas), memoria (marcos + tablas de páginas), dispositivos E/S, métricas (espera/retorno/respuesta) y bitácora de eventos, además de un editor interactivo de procesos.
+- **Reproducibilidad total**: todas las corridas son 100% deterministas (misma configuración → misma traza).
+
+**Pruebas: 17 tests en verde** (17 funciones de test en 4 archivos) que cubren scheduling, memoria, E/S y determinismo.
+
+### Cómo retomar el trabajo
+
+Desde una sesión nueva, en la carpeta del proyecto:
+
+**Windows (PowerShell):**
+
+```powershell
+# 1. Crear y activar el entorno virtual
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# 2. Instalar dependencias
+pip install -r requirements.txt
+
+# 3. Correr los tests (deben pasar los 17)
+pip install pytest
+python -m pytest
+
+# 4. Levantar el servidor
+python -m uvicorn so_sim.app:app
+```
+
+> Atajo en Windows: en lugar de los pasos manuales puedes ejecutar `run.bat` (doble clic o `run.bat` en PowerShell).
+
+**Linux / macOS:**
+
+```bash
+# 1. Entorno virtual
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 2. Dependencias y tests
+pip install -r requirements.txt
+pip install pytest
+python3 -m pytest
+
+# 3. Servidor
+python3 -m uvicorn so_sim.app:app
+```
+
+Por último, abrir el navegador en:
+
+```
+http://127.0.0.1:8000
+```
+
+### Mapa rápido del código
+
+La estructura separa núcleo (Python puro, testeable), API delgada (FastAPI) y UI (vanilla JS):
+
+- **`so_sim/core/world.py`** — `World`: el corazón del simulador. Su `tick()` ejecuta las fases en orden fijo: **admisión → planificar/apropiar → acceso_mem → ejecutar_ráfaga → fin_io → avanzar_dispositivos → contabilidad**. Empieza por aquí para entender el ciclo. El `costo_fault` (congelar CPU N ticks ante un fallo) está alrededor de `world.py:112`.
+- **`so_sim/core/pcb.py`** — PCB y declarativas (`AccesoMem`, `PeticionIO`): los accesos a memoria y E/S se definen en `plan_mem` / `plan_io` y ocurren cuando `cpu_consumido` alcanza el valor declarado (esto es lo que hace todo reproducible, e incluso permite que Óptimo "vea el futuro").
+- **Planificadores** — `so_sim/core/scheduler/`: clase base en `base.py`, una implementación por archivo (`fcfs.py`, `sjf.py`, `srtf.py`, `round_robin.py`, `priority.py`, `mlq.py`) y la fábrica `get_scheduler()` en `__init__.py`.
+- **Memoria** — `so_sim/core/memory/`: `mmu.py` (traducción y manejo de fallos), `page_table.py` (VPN→marco, bits de validez/referencia/timestamps), `frames.py` (marcos físicos), `replacement.py` (FIFO/LRU/Óptimo/Reloj) con la fábrica `get_replacer()` en `__init__.py`.
+- **E/S** — `so_sim/core/io/devices.py`: `Device` e `IoSubsystem`, modelado por ticks.
+- **`so_sim/core/serialize.py`** — `to_dict()`: contrato único JSON con el frontend (procesos, memoria, I/O, Gantt, eventos, métricas). Serializa sin importar FastAPI.
+- **`so_sim/manager.py`** — `SimulationManager`: gestiona el `World`, el bucle de reproducción (`asyncio.Lock`), genera snapshots y los publica a los suscriptores SSE.
+- **`so_sim/app.py`** + **`so_sim/api/`** — capa FastAPI: `routes_control.py`, `routes_state.py`, `routes_config.py` y los modelos Pydantic en `schemas.py`.
+- **Frontend** — `so_sim/static/`: `index.html`, `css/` y `js/` (lógica cliente con `fetch`/SSE). La validación vive en backend (`MundoConfig.validar()`) y cliente (`validarCliente()` en JS).
+- **Tests** — `tests/`: `test_schedulers.py` (7), `test_memory.py` (3), `test_io.py` (3), `test_world_tick.py` (4); utilidades en `helpers.py`.
+
+### Pendientes y posibles mejoras
+
+- **Exponer `costo_fault` en el editor** (dificultad: **baja**) — ya existe en `config.py`/`world.py` pero `js/editor.js` lo fija a 0; falta añadir el campo en HTML y enviarlo en el POST.
+- **Exponer el tipo de dispositivo en el editor** (dificultad: **baja**) — hoy se crea hardcodeado como `disco`; permitir elegir entre disco/impresora/teclado/red por dispositivo.
+- **Duplicar proceso en el editor** (dificultad: **baja**) — copiar un proceso existente (PID+N, nombre, ráfaga, accesos, E/S) para crear variantes rápido.
+- **Exportar/guardar escenarios a JSON** (dificultad: **baja**) — botón de descarga que serialice la configuración actual para compartir o archivar.
+- **Validación avanzada en el editor** (dificultad: **baja**) — validar VPN antes de enviar (no cargar la misma página dos veces, avisar de accesos fuera del rango de `offset_bits`), sugerir nombres.
+- **Paginación de la bitácora** (dificultad: **media**) — hoy `MAX_EVENTOS=14` solo muestra los últimos; añadir scroll/paginación para escenarios largos.
+- **Métricas ampliadas** (dificultad: **media**) — añadir context switches, % de CPU idle y tabla por proceso (no solo promedios).
+- **Más algoritmos** (dificultad: **media**) — Feedback (FB), AGING para prioridad, Clock-Pro para memoria; el patrón Strategy facilita la extensión.
+- **Lazy allocation / swapping** (dificultad: **alta**) — cargar marcos solo al primer acceso, o swap a disco con penalización de acceso.
+- **Comparativa visual entre algoritmos** (dificultad: **alta**) — correr el mismo escenario con distintos planificadores/reemplazos lado a lado y mostrar tabla comparativa.
 ```
