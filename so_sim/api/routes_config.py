@@ -3,7 +3,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from ..core import MundoConfig
 from ..scenarios import presets
-from .schemas import ReplacerBody, ScenarioBody, SchedulerBody
+from .schemas import (EstrategiaBody, GenerarBody, ReplacerBody, ScenarioBody,
+                      SchedulerBody)
 
 router = APIRouter(prefix="/api", tags=["config"])
 
@@ -27,6 +28,32 @@ async def cambiar_replacer(body: ReplacerBody, request: Request):
         await _mgr(request).set_replacer(body.algoritmo)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True}
+
+
+@router.post("/config/estrategia")
+async def cambiar_estrategia(body: EstrategiaBody, request: Request):
+    try:
+        await _mgr(request).set_estrategia_mem(body.algoritmo)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True}
+
+
+@router.post("/demo20")
+async def cargar_demo20(request: Request):
+    await _mgr(request).load_config(presets.demo20())
+    return {"ok": True}
+
+
+@router.post("/generar")
+async def generar(body: GenerarBody, request: Request):
+    seed = body.seed if body.seed is not None else 12345
+    try:
+        cfg = presets.generar_aleatorio(body.cantidad, seed)
+        await _mgr(request).load_config(cfg)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Configuracion invalida: {e}")
     return {"ok": True}
 
 

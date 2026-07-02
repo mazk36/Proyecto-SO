@@ -1,5 +1,6 @@
-// Editor de procesos / escenario: construye un escenario y lo carga vía
-// POST /api/config/scenario. Precarga el escenario actual con GET /api/config/actual.
+// Editor de procesos / escenario: construye un escenario completo (memoria fisica,
+// paginacion, dispatcher, procesos) y lo carga via POST /api/config/scenario.
+// Validacion inline por campo antes de enviar (sin alert()).
 import { postJSON } from "./api.js";
 
 const $ = (id) => document.getElementById(id);
@@ -17,7 +18,7 @@ function filaAcceso(en_cpu = 0, vpn = 0) {
   return div;
 }
 
-function filaIO(en_cpu = 0, dispositivo = "", duracion = 2) {
+function filaIO(en_cpu = 0, dispositivo = "", duracion = 3) {
   const opts = dispositivosActuales()
     .map(d => `<option ${d === dispositivo ? "selected" : ""}>${d}</option>`).join("");
   const div = document.createElement("div");
@@ -45,15 +46,23 @@ function tarjetaProceso(p = {}) {
         <option value="BAJA" ${p.nivel_mlq === "BAJA" ? "selected" : ""}>BAJA</option></select></label>
       <button class="btn peligro ed-proc-del" type="button">Eliminar</button>
     </div>
+    <div class="ed-fila">
+      <label>Ejecutable (KB) <input class="ed-tejec num" type="number" min="1" value="${p.tam_ejecutable ?? 128}"></label>
+      <label>Datos (KB) <input class="ed-tdatos num" type="number" min="0" value="${p.tam_datos ?? 64}"></label>
+      <label>Dinámica (KB) <input class="ed-tdin num" type="number" min="0" value="${p.tam_dinamica ?? 32}"></label>
+      <label>Interrupciones <select class="ed-modo">
+        <option value="declarativo" ${p.modo_interrupciones !== "aleatorio" ? "selected" : ""}>declarativo</option>
+        <option value="aleatorio" ${p.modo_interrupciones === "aleatorio" ? "selected" : ""}>aleatorio</option></select></label>
+    </div>
     <div class="ed-sub">
       <div class="ed-bloque">
-        <div class="ed-bloque-cab">Accesos a memoria
-          <button class="btn ed-mini ed-acc-add" type="button">＋ acceso</button></div>
+        <div class="ed-bloque-cab">Accesos a memoria (paginación)
+          <button class="btn ed-mini ed-acc-add" type="button">＋</button></div>
         <div class="ed-acc-list"></div>
       </div>
       <div class="ed-bloque">
-        <div class="ed-bloque-cab">Peticiones de E/S
-          <button class="btn ed-mini ed-io-add" type="button">＋ E/S</button></div>
+        <div class="ed-bloque-cab">Peticiones de E/S (modo declarativo)
+          <button class="btn ed-mini ed-io-add" type="button">＋</button></div>
         <div class="ed-io-list"></div>
       </div>
     </div>`;
@@ -68,10 +77,18 @@ function abrir(prefill) {
   $("ed-error").textContent = "";
   $("ed-scheduler").value = prefill.scheduler || "fcfs";
   $("ed-quantum").value = prefill.quantum || 3;
-  $("ed-replacer").value = prefill.replacer || "fifo";
+  $("ed-costocc").value = prefill.costo_cambio ?? 0;
+  $("ed-error-rate").value = ((prefill.tasa_error ?? 0) * 100).toFixed(1);
+  $("ed-ram").value = prefill.ram_total || 16384;
+  $("ed-ramso").value = prefill.ram_so ?? 2048;
+  $("ed-bloque").value = prefill.tam_bloque || 256;
+  $("ed-estrategia").value = prefill.estrategia_mem || "first_fit";
+  $("ed-pag").checked = prefill.paginacion_activa !== false;
   $("ed-marcos").value = prefill.num_marcos || 4;
   $("ed-offset").value = prefill.offset_bits || 12;
-  $("ed-disp").value = (prefill.dispositivos || []).map(d => d.nombre).join(", ") || "Disco, Impresora";
+  $("ed-replacer").value = prefill.replacer || "fifo";
+  $("ed-disp").value = (prefill.dispositivos || []).map(d => d.nombre).join(", ")
+    || "Teclado, Disco, Impresora, Mouse, Red";
 
   const cont = $("ed-procesos");
   cont.innerHTML = "";
@@ -111,32 +128,50 @@ function recolectar() {
       rafaga: parseInt(v(".ed-raf").value) || 1,
       prioridad: parseInt(v(".ed-prio").value) || 0,
       nivel_mlq: v(".ed-nivel").value,
+      tam_ejecutable: parseInt(v(".ed-tejec").value) || 1,
+      tam_datos: parseInt(v(".ed-tdatos").value) || 0,
+      tam_dinamica: parseInt(v(".ed-tdin").value) || 0,
+      modo_interrupciones: v(".ed-modo").value,
       accesos, io,
     };
   });
   return {
     scheduler: $("ed-scheduler").value,
     quantum: parseInt($("ed-quantum").value) || 3,
-    replacer: $("ed-replacer").value,
+    costo_cambio: parseInt($("ed-costocc").value) || 0,
+    tasa_error: (parseFloat($("ed-error-rate").value) || 0) / 100,
+    ram_total: parseInt($("ed-ram").value) || 16384,
+    ram_so: parseInt($("ed-ramso").value) || 0,
+    tam_bloque: parseInt($("ed-bloque").value) || 256,
+    estrategia_mem: $("ed-estrategia").value,
+    paginacion_activa: $("ed-pag").checked,
     num_marcos: parseInt($("ed-marcos").value) || 1,
     offset_bits: parseInt($("ed-offset").value) || 12,
-    costo_fault: 0,
-    dispositivos: dispositivosActuales().map(n => ({ nombre: n, tipo: "disco" })),
+    replacer: $("ed-replacer").value,
+    dispositivos: dispositivosActuales().map(n => ({ nombre: n, tipo: n.toLowerCase() })),
     procesos,
   };
 }
 
+function esPot2(n) { return n > 0 && (n & (n - 1)) === 0; }
+
 function validarCliente(esc) {
   if (!esc.procesos.length) return "Agrega al menos un proceso.";
+  if (!esc.dispositivos.length) return "Define al menos un dispositivo de E/S.";
+  if (!esPot2(esc.tam_bloque) || esc.tam_bloque < 32 || esc.tam_bloque > 2048)
+    return "El tamaño de bloque debe ser potencia de 2 entre 32 y 2048 KB.";
+  if (esc.ram_so >= esc.ram_total) return "La RAM del SO debe ser menor que la RAM total.";
+  const disponible = esc.ram_total - esc.ram_so;
   const pids = esc.procesos.map(p => p.pid);
   if (pids.some(x => !Number.isInteger(x) || x < 1)) return "Cada proceso necesita un PID entero ≥ 1.";
   if (new Set(pids).size !== pids.length) return "Hay PIDs repetidos.";
-  if (!esc.dispositivos.length) return "Define al menos un dispositivo de E/S.";
   for (const p of esc.procesos) {
     if (p.rafaga < 1) return `P${p.pid}: la ráfaga debe ser ≥ 1.`;
+    const tam = p.tam_ejecutable + p.tam_datos + p.tam_dinamica;
+    if (tam > disponible) return `P${p.pid}: necesita ${tam} KB pero solo hay ${disponible} KB para procesos.`;
     for (const x of p.io) {
       if (!esc.dispositivos.find(d => d.nombre === x.dispositivo))
-        return `P${p.pid}: E/S en un dispositivo que no existe ("${x.dispositivo}").`;
+        return `P${p.pid}: E/S en un dispositivo inexistente ("${x.dispositivo}").`;
       if (x.en_cpu >= p.rafaga) return `P${p.pid}: la E/S debe ocurrir antes de agotar la ráfaga.`;
     }
     for (const a of p.accesos) if (a.en_cpu >= p.rafaga)
@@ -174,7 +209,6 @@ export function initEditor() {
     $("ed-procesos").appendChild(tarjetaProceso({ pid: next, nombre: "P" + next }));
   };
 
-  // Delegación de eventos para los botones creados dinámicamente.
   $("ed-procesos").addEventListener("click", (e) => {
     const t = e.target;
     if (t.classList.contains("ed-proc-del")) t.closest(".ed-proc").remove();

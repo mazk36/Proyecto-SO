@@ -22,6 +22,12 @@ export async function getState() {
 // Abre el stream SSE. Si falla (proxy/antivirus en Windows), cae a polling de
 // /api/state hasta que el stream vuelva. El servidor conduce el reloj.
 export function iniciarStream(onSnapshot) {
+  // Modo estatico (?static): una sola lectura, sin SSE ni polling. Util para
+  // capturas de pantalla y navegadores headless que no cierran con streams abiertos.
+  if (new URLSearchParams(location.search).has("static")) {
+    getState().then(onSnapshot).catch(() => {});
+    return;
+  }
   let pollTimer = null;
   const poll = () => getState().then(onSnapshot).catch(() => {});
   const startPoll = () => { if (!pollTimer) { poll(); pollTimer = setInterval(poll, 800); } };

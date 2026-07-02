@@ -6,10 +6,12 @@ termina durante el tick `t_fin` completa en `t_fin + 1`.
   - respuesta = t_primer_despacho - llegada
   - espera    = ticks que el proceso paso en estado LISTO (espera_acumulada)
 La espera se mide directamente (no se deriva), por lo que es exacta aun con E/S
-de por medio.
+de por medio. Las medias se calculan solo sobre procesos TERMINADOS normalmente
+(los que abortan con ERROR se contabilizan aparte).
 """
 from typing import List, Optional
 
+from .enums import Estado
 from .pcb import PCB
 
 
@@ -33,11 +35,19 @@ def metricas_proceso(p: PCB) -> dict:
     return {"espera": espera(p), "retorno": retorno(p), "respuesta": respuesta(p)}
 
 
+def resumen_errores(procesos: List[PCB]) -> dict:
+    ok = sum(1 for p in procesos if p.estado == Estado.TERMINADO)
+    con_error = sum(1 for p in procesos if p.estado == Estado.ERROR)
+    return {"terminados_ok": ok, "con_error": con_error}
+
+
 def promedios(procesos: List[PCB]) -> dict:
-    terminados = [p for p in procesos if p.t_fin is not None]
+    terminados = [p for p in procesos if p.estado == Estado.TERMINADO]
+    err = resumen_errores(procesos)
     if not terminados:
         return {"espera": None, "retorno": None, "respuesta": None,
-                "terminados": 0, "total": len(procesos)}
+                "terminados": 0, "total": len(procesos),
+                "terminados_ok": err["terminados_ok"], "con_error": err["con_error"]}
     n = len(terminados)
     prom_esp = sum(espera(p) for p in terminados) / n
     prom_ret = sum(retorno(p) for p in terminados) / n
@@ -48,4 +58,5 @@ def promedios(procesos: List[PCB]) -> dict:
         "retorno": round(prom_ret, 2),
         "respuesta": round(prom_resp, 2) if prom_resp is not None else None,
         "terminados": n, "total": len(procesos),
+        "terminados_ok": err["terminados_ok"], "con_error": err["con_error"],
     }

@@ -85,14 +85,61 @@ PRESETS = {
 PRESET_DEFECTO = "basico"
 
 
+# --- Demo de 20 procesos (para evaluar/comparar algoritmos y estrategias) -----
+# Se genera de forma REPRODUCIBLE con una semilla fija. Memoria algo ajustada para
+# que las estrategias de asignacion (First/Best/Worst-Fit) se diferencien y para
+# mostrar presion de memoria. Sin E/S de teclado para que el modo Play fluya; la
+# senal de teclado se dispara con el boton de la UI.
+def _demo20_dict() -> dict:
+    from ..core.aleatorio import Generador
+    gen = Generador(seed=2026)
+    # dispositivos SIN teclado para la generacion automatica de E/S
+    devs_io = ["Disco", "Impresora", "Mouse", "Red"]
+    procesos = gen.generar_procesos(20, devs_io, llegada_max=12)
+    return {
+        "descripcion": ("Demo de 20 procesos variados (burst, tamano y prioridad). "
+                        "Base para comparar los 4 planificadores y las 3 estrategias de memoria."),
+        "scheduler": "rr", "quantum": 3, "costo_cambio": 1,
+        "estrategia_mem": "first_fit",
+        "ram_total": 8192, "ram_so": 1024, "tam_bloque": 256,
+        "paginacion_activa": True, "num_marcos": 6, "replacer": "lru",
+        "tasa_error": 0.005, "seed": 2026,
+        "procesos": procesos,
+    }
+
+
 def listar() -> list:
-    return [{"nombre": k, "descripcion": v["descripcion"]} for k, v in PRESETS.items()]
+    items = [{"nombre": k, "descripcion": v["descripcion"]} for k, v in PRESETS.items()]
+    items.append({"nombre": "demo20", "descripcion": _demo20_dict()["descripcion"]})
+    return items
 
 
 def cargar(nombre: str) -> MundoConfig:
+    if nombre == "demo20":
+        return MundoConfig.from_dict(_demo20_dict())
     if nombre not in PRESETS:
         raise KeyError(f"Preset desconocido: {nombre}")
     return MundoConfig.from_dict(PRESETS[nombre])
+
+
+def demo20() -> MundoConfig:
+    return MundoConfig.from_dict(_demo20_dict())
+
+
+def generar_aleatorio(cantidad: int = 10, seed: int = 12345) -> MundoConfig:
+    """Genera un escenario aleatorio reproducible de `cantidad` procesos."""
+    from ..core.aleatorio import Generador
+    gen = Generador(seed=seed)
+    procesos = gen.generar_procesos(cantidad, ["Disco", "Impresora", "Mouse", "Red"],
+                                    llegada_max=max(4, cantidad // 2))
+    return MundoConfig.from_dict({
+        "descripcion": f"Escenario aleatorio de {cantidad} procesos (semilla {seed}).",
+        "scheduler": "rr", "quantum": 3, "costo_cambio": 1,
+        "estrategia_mem": "first_fit",
+        "ram_total": 16384, "ram_so": 2048, "tam_bloque": 256,
+        "paginacion_activa": True, "num_marcos": 6, "replacer": "lru",
+        "tasa_error": 0.005, "seed": seed, "procesos": procesos,
+    })
 
 
 def config_por_defecto() -> MundoConfig:

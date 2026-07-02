@@ -109,6 +109,28 @@ class SimulationManager:
             self.world.set_replacer(algo)
         await self._publish()
 
+    async def set_estrategia_mem(self, algo: str) -> None:
+        async with self.lock:
+            self.world.set_estrategia_mem(algo)
+        await self._publish()
+
+    async def senal_teclado(self) -> None:
+        """Dispara manualmente una interrupcion de teclado sobre el proceso en CPU."""
+        await self._detener_task()          # pausa: exige decision del usuario
+        async with self.lock:
+            self.world.senal_teclado_manual()
+        await self._publish()
+
+    async def resolver_teclado(self, accion: str) -> None:
+        async with self.lock:
+            self.world.resolver_teclado(accion)
+        await self._publish()
+
+    def comparativa(self) -> dict:
+        """Comparativa headless (no toca la simulacion en vivo)."""
+        from .core.comparativa import comparativa_completa
+        return comparativa_completa(self.cfg)
+
     async def load_config(self, cfg: MundoConfig) -> None:
         cfg.validar()
         await self._detener_task()

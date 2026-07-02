@@ -13,6 +13,12 @@ async def state(request: Request):
     return request.app.state.manager.snapshot()
 
 
+@router.get("/comparativa")
+async def comparativa(request: Request):
+    """Comparativa de los 4 planificadores y las 3 estrategias de memoria."""
+    return request.app.state.manager.comparativa()
+
+
 @router.get("/stream")
 async def stream(request: Request):
     mgr = request.app.state.manager

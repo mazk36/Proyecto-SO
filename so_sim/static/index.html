@@ -10,121 +10,142 @@
   <header class="barra-sup">
     <div class="titulo">
       <h1>🖥️ Simulador de Sistema Operativo</h1>
-      <span class="sub">Procesos · Memoria virtual · E/S</span>
+      <span class="sub">Procesos · Memoria física · E/S · <i>(paginación: módulo avanzado)</i></span>
     </div>
     <div class="estado-global">
-      <div class="reloj">Tiempo (tick): <b id="tick-actual">0</b></div>
+      <div class="reloj">tick <b id="tick-actual">0</b></div>
       <div id="estado-sim" class="badge pausado">PAUSADO</div>
     </div>
   </header>
 
+  <!-- Barra de controles: todo lo mas usado siempre visible -->
   <section class="controles">
     <div class="grupo">
-      <button id="btn-play" class="btn primario">▶ Reproducir</button>
-      <button id="btn-pause" class="btn">⏸ Pausa</button>
-      <button id="btn-step" class="btn">⏭ Paso</button>
-      <button id="btn-reset" class="btn peligro">⟲ Reiniciar</button>
+      <button id="btn-play" class="btn primario">▶</button>
+      <button id="btn-pause" class="btn">⏸</button>
+      <button id="btn-step" class="btn">⏭</button>
+      <button id="btn-reset" class="btn peligro">⟲</button>
     </div>
     <div class="grupo">
-      <label>Velocidad
+      <label class="lab">Velocidad
         <input type="range" id="vel" min="50" max="2000" step="50" value="600">
         <span id="vel-label" class="mono">600 ms</span>
       </label>
     </div>
     <div class="grupo">
-      <label>Planificador
+      <label class="lab">Planificador
         <select id="sel-scheduler">
-          <option value="fcfs">FCFS</option>
-          <option value="sjf">SJF</option>
-          <option value="srtf">SRTF (apropiativo)</option>
-          <option value="rr">Round Robin</option>
-          <option value="prioridad_np">Prioridad (no apropiativa)</option>
-          <option value="prioridad_ap">Prioridad (apropiativa)</option>
-          <option value="mlq">MLQ (multinivel)</option>
+          <optgroup label="Obligatorios">
+            <option value="fcfs">FCFS</option>
+            <option value="sjf">SJF (no apropiativo)</option>
+            <option value="prioridad_ap">Prioridad (apropiativa)</option>
+            <option value="rr">Round Robin</option>
+          </optgroup>
+          <optgroup label="Adicionales">
+            <option value="srtf">SRTF</option>
+            <option value="prioridad_np">Prioridad (no apr.)</option>
+            <option value="mlq">MLQ</option>
+          </optgroup>
         </select>
       </label>
-      <label id="wrap-quantum">Quantum
+      <label id="wrap-quantum" class="lab">Quantum
         <input type="number" id="inp-quantum" min="1" max="20" value="3" class="num">
       </label>
     </div>
     <div class="grupo">
-      <label>Reemplazo
-        <select id="sel-replacer">
-          <option value="fifo">FIFO</option>
-          <option value="lru">LRU</option>
-          <option value="optimo">Óptimo</option>
-          <option value="reloj">Segunda oportunidad / Reloj</option>
+      <label class="lab">Estrategia memoria
+        <select id="sel-estrategia">
+          <option value="first_fit">First-Fit</option>
+          <option value="best_fit">Best-Fit</option>
+          <option value="worst_fit">Worst-Fit</option>
         </select>
       </label>
     </div>
     <div class="grupo">
-      <label>Escenario
+      <label class="lab">Escenario
         <select id="sel-preset"></select>
       </label>
-      <button id="btn-editor" class="btn">✏️ Crear / editar procesos</button>
+    </div>
+    <div class="grupo grupo-acciones">
+      <button id="btn-demo" class="btn demo">👥 Cargar demo de 20</button>
+      <button id="btn-generar" class="btn">🎲 Generar aleatorio</button>
+      <button id="btn-editor" class="btn">✏️ Crear proceso</button>
+      <button id="btn-comparativa" class="btn">📊 Comparativa</button>
     </div>
   </section>
 
   <main class="tablero">
-    <!-- Columna 1: procesos + colas -->
-    <div class="col">
-      <div class="panel">
-        <h2>Procesos (PCB)</h2>
-        <div class="tabla-scroll">
-          <table class="tabla">
-            <thead>
-              <tr><th>PID</th><th>Nombre</th><th>Estado</th><th>Prio</th><th>Restante</th><th>Progreso</th></tr>
-            </thead>
-            <tbody id="tbody-procesos"></tbody>
-          </table>
+    <!-- FILA 1 -->
+    <section class="panel p-cpu">
+      <div class="panel-cab"><h2>🧠 CPU</h2><span id="cpu-alg" class="tag"></span></div>
+      <div class="panel-cuerpo" id="cpu-actual"></div>
+    </section>
+
+    <section class="panel p-proc">
+      <div class="panel-cab"><h2>📋 Procesos (PCB)</h2><span id="proc-cont" class="tag"></span></div>
+      <div class="panel-cuerpo scroll">
+        <table class="tabla" id="tabla-procesos">
+          <thead><tr>
+            <th>PID</th><th>Nombre</th><th>Estado</th><th>PC</th><th>Prio</th>
+            <th>Rest.</th><th>Tam</th><th>Dir</th><th>Progreso</th>
+          </tr></thead>
+          <tbody id="tbody-procesos"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel p-metr">
+      <div class="panel-cab"><h2>📈 Métricas</h2></div>
+      <div class="panel-cuerpo scroll" id="tabla-metricas"></div>
+    </section>
+
+    <!-- FILA 2 -->
+    <section class="panel p-colas">
+      <div class="panel-cab"><h2>🗂️ Colas</h2></div>
+      <div class="panel-cuerpo scroll" id="colas"></div>
+    </section>
+
+    <section class="panel p-mem">
+      <div class="panel-cab">
+        <h2>💾 Memoria física</h2>
+        <div class="tabs">
+          <button class="tab activa" data-tab="fisica">Física</button>
+          <button class="tab" data-tab="paginacion">Paginación (PLUS)</button>
         </div>
       </div>
-      <div class="panel">
-        <h2>Colas de planificación</h2>
-        <div id="colas"></div>
+      <div class="panel-cuerpo scroll">
+        <div id="tab-fisica"></div>
+        <div id="tab-paginacion" class="oculto"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- Columna 2: CPU + Gantt + E/S -->
-    <div class="col">
-      <div class="panel">
-        <h2>CPU</h2>
-        <div id="cpu-actual" class="cpu-box"></div>
-      </div>
-      <div class="panel">
-        <h2>Diagrama de Gantt</h2>
-        <div class="gantt-scroll"><canvas id="cv-gantt" height="120"></canvas></div>
-      </div>
-      <div class="panel">
-        <h2>Dispositivos de E/S</h2>
+    <section class="panel p-io">
+      <div class="panel-cab"><h2>🖧 Dispositivos E/S</h2></div>
+      <div class="panel-cuerpo scroll">
+        <div id="io-decision" class="io-decision oculto"></div>
         <div id="io-dispositivos" class="io-grid"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- Columna 3: memoria + métricas + bitácora -->
-    <div class="col">
-      <div class="panel">
-        <h2>Memoria física <span id="mem-alg" class="tag"></span></h2>
-        <div id="mem-contadores" class="contadores"></div>
-        <div id="marcos" class="marcos"></div>
-        <div id="mem-ultimo" class="mem-ultimo"></div>
-        <details>
-          <summary>Tablas de páginas por proceso</summary>
-          <div id="mem-tablas"></div>
-        </details>
+    <section class="panel p-log">
+      <div class="panel-cab">
+        <h2>📜 Bitácora</h2>
+        <div class="log-acciones">
+          <button id="btn-log-limpiar" class="btn ed-mini">Limpiar</button>
+          <button id="btn-log-export" class="btn ed-mini">Exportar .txt</button>
+        </div>
       </div>
-      <div class="panel">
-        <h2>Métricas</h2>
-        <div id="tabla-metricas"></div>
-      </div>
-      <div class="panel">
-        <h2>Bitácora</h2>
-        <ul id="bitacora" class="bitacora"></ul>
-      </div>
-    </div>
+      <div class="panel-cuerpo scroll"><ul id="bitacora" class="bitacora"></ul></div>
+    </section>
   </main>
 
-  <!-- Editor de procesos / escenario -->
+  <!-- Gantt colapsable (bonus, no ocupa la pantalla principal) -->
+  <details class="gantt-det">
+    <summary>📊 Diagrama de Gantt (CPU por tick)</summary>
+    <div class="gantt-scroll"><canvas id="cv-gantt" height="110"></canvas></div>
+  </details>
+
+  <!-- ===== Editor de procesos / escenario ===== -->
   <div id="modal-editor" class="modal oculto">
     <div class="modal-caja">
       <div class="modal-cab">
@@ -132,41 +153,78 @@
         <button id="ed-cerrar" class="btn">✕</button>
       </div>
       <div class="modal-cuerpo">
-        <div class="ed-global">
+        <fieldset class="ed-global">
+          <legend>Parámetros globales</legend>
           <label>Planificador
             <select id="ed-scheduler">
               <option value="fcfs">FCFS</option>
               <option value="sjf">SJF</option>
-              <option value="srtf">SRTF</option>
-              <option value="rr">Round Robin</option>
-              <option value="prioridad_np">Prioridad (no apr.)</option>
               <option value="prioridad_ap">Prioridad (apr.)</option>
+              <option value="rr">Round Robin</option>
+              <option value="srtf">SRTF</option>
+              <option value="prioridad_np">Prioridad (no apr.)</option>
               <option value="mlq">MLQ</option>
             </select>
           </label>
           <label>Quantum <input id="ed-quantum" type="number" min="1" max="20" value="3" class="num"></label>
-          <label>Reemplazo
-            <select id="ed-replacer">
-              <option value="fifo">FIFO</option>
-              <option value="lru">LRU</option>
-              <option value="optimo">Óptimo</option>
-              <option value="reloj">Reloj</option>
+          <label>Costo cambio ctx <input id="ed-costocc" type="number" min="0" max="10" value="0" class="num"></label>
+          <label>Tasa error % <input id="ed-error-rate" type="number" min="0" max="100" step="0.1" value="0" class="num"></label>
+        </fieldset>
+        <fieldset class="ed-global">
+          <legend>Memoria física (obligatorio)</legend>
+          <label>RAM total (KB) <input id="ed-ram" type="number" min="256" value="16384" class="num"></label>
+          <label>RAM SO (KB) <input id="ed-ramso" type="number" min="0" value="2048" class="num"></label>
+          <label>Bloque (KB) <input id="ed-bloque" type="number" min="32" max="2048" value="256" class="num"></label>
+          <label>Estrategia
+            <select id="ed-estrategia">
+              <option value="first_fit">First-Fit</option>
+              <option value="best_fit">Best-Fit</option>
+              <option value="worst_fit">Worst-Fit</option>
             </select>
           </label>
+        </fieldset>
+        <fieldset class="ed-global">
+          <legend>Paginación (módulo avanzado)</legend>
+          <label class="chk"><input id="ed-pag" type="checkbox" checked> Activar paginación</label>
           <label>Marcos <input id="ed-marcos" type="number" min="1" max="32" value="4" class="num"></label>
           <label>Bits offset <input id="ed-offset" type="number" min="4" max="16" value="12" class="num"></label>
-          <label>Dispositivos <input id="ed-disp" type="text" value="Disco, Impresora" size="22"></label>
-        </div>
+          <label>Reemplazo
+            <select id="ed-replacer">
+              <option value="fifo">FIFO</option><option value="lru">LRU</option>
+              <option value="optimo">Óptimo</option><option value="reloj">Reloj</option>
+            </select>
+          </label>
+          <label>Dispositivos <input id="ed-disp" type="text" value="Teclado, Disco, Impresora, Mouse, Red" size="34"></label>
+        </fieldset>
         <div id="ed-procesos"></div>
-        <button id="ed-add" class="btn">＋ Agregar proceso</button>
-        <p class="ed-ayuda">En “Accesos a memoria” indicas a qué <b>página (VPN)</b> accede el proceso
-          cuando lleva <i>N</i> unidades de CPU. En “E/S”, en qué instante de CPU se bloquea, en qué
-          dispositivo y por cuántos ticks.</p>
+        <div class="ed-add-row">
+          <button id="ed-add" class="btn">＋ Agregar proceso</button>
+        </div>
+        <p class="ed-ayuda">Modo <b>declarativo</b>: defines tú las E/S. Modo <b>aleatorio</b>: se generan con
+          las fórmulas del sistema. Los <b>accesos a memoria</b> (página/VPN) solo aplican al módulo de paginación.</p>
         <div id="ed-error" class="ed-error"></div>
       </div>
       <div class="modal-pie">
         <button id="ed-cancelar" class="btn">Cancelar</button>
         <button id="ed-cargar" class="btn primario">Cargar al simulador</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Comparativa ===== -->
+  <div id="modal-comp" class="modal oculto">
+    <div class="modal-caja">
+      <div class="modal-cab">
+        <h2>📊 Comparativa de algoritmos y estrategias</h2>
+        <button id="comp-cerrar" class="btn">✕</button>
+      </div>
+      <div class="modal-cuerpo" id="comp-cuerpo">
+        <p class="ed-ayuda">Corre el escenario actual con cada opción (sin afectar la simulación en vivo).</p>
+        <div id="comp-tablas"></div>
+      </div>
+      <div class="modal-pie">
+        <button id="comp-csv-sched" class="btn">Exportar planificadores .csv</button>
+        <button id="comp-csv-mem" class="btn">Exportar estrategias .csv</button>
       </div>
     </div>
   </div>
